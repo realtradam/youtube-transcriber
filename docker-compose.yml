@@ -1,0 +1,13 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: youtube-transcriber-dev
+    ports:
+      - "41090:41090"
+    volumes:
+      - ./app:/app/app:ro
+      - ./pyproject.toml:/app/pyproject.toml:ro
+      - ./data:/app/data
+    restart: unless-stopped

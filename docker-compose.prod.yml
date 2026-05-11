@@ -1,0 +1,11 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: youtube-transcriber
+    ports:
+      - "41090:41090"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped

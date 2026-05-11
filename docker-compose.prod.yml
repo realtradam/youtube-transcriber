@@ -3,9 +3,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: youtube-transcriber
-    ports:
-      - "41090:41090"
     volumes:
-      - ./data:/app/data
+      - transcriber_data:/app/data
     restart: unless-stopped
+
+volumes:
+  transcriber_data:

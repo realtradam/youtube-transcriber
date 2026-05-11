@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    ports:
+      - "41090:41090"
     volumes:
       - transcriber_data:/app/data
     restart: unless-stopped

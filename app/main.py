@@ -16,6 +16,30 @@ from app.storage import TranscriptStore
 from app.transcriber import InvalidURLError, create_api, extract_video_id
 from app.worker import run_worker
 
+from datetime import datetime
+
+# How long to wait before retrying a failed video, per error_type (seconds).
+# All failures are retryable; cooldowns avoid hammering YouTube or a blocked IP.
+RETRY_COOLDOWN_SECONDS: dict[str, float] = {
+    "not_available": 120.0,        # subtitles may not be generated yet
+    "transcript_disabled": 120.0,  # rarely changes, but allow eventual recheck
+    "ip_blocked": 120.0,           # back off when our IP is blocked
+    "internal_error": 120.0,       # transient bugs / network blips
+}
+DEFAULT_RETRY_COOLDOWN_SECONDS = 120.0
+
+
+def _failed_entry_is_retryable(entry: dict) -> bool:
+    """Return True if a failed queue entry has cooled down enough to retry."""
+    cooldown = RETRY_COOLDOWN_SECONDS.get(
+        entry["error_type"] or "", DEFAULT_RETRY_COOLDOWN_SECONDS
+    )
+    updated_at = entry.get("updated_at")
+    if not updated_at:
+        return True
+    age = (datetime.utcnow() - datetime.fromisoformat(updated_at)).total_seconds()
+    return age >= cooldown
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -80,6 +104,16 @@ async def get_transcript(
     entry = await store.get_queue_entry(video_id)
     if entry is not None:
         if entry["status"] == "failed":
+            # All failures are retryable once their cooldown has elapsed.
+            if _failed_entry_is_retryable(entry):
+                await store.requeue_failed(video_id)
+                estimate = await store.get_position_and_estimate(video_id)
+                return TranscriptQueuedResponse(
+                    status="queued",
+                    video_id=video_id,
+                    position=estimate["position"],
+                    estimated_seconds=estimate["estimated_seconds"],
+                )
             return TranscriptFailedResponse(
                 video_id=video_id,
                 error=entry["error"] or "",

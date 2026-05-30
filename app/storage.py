@@ -140,6 +140,23 @@ class TranscriptStore:
         )
         await self._db.commit()
 
+    async def requeue_failed(self, video_id: str) -> dict:
+        """Reset a failed queue entry back to pending so it will be retried.
+
+        Assigns a fresh delay and clears the previous error. Returns the entry.
+        """
+        delay = random.uniform(30.0, 60.0)
+        now = datetime.utcnow().isoformat()
+        await self._db.execute(
+            """UPDATE queue
+               SET status = 'pending', assigned_delay = ?, error = NULL,
+                   error_type = NULL, updated_at = ?, started_at = NULL
+               WHERE video_id = ? AND status = 'failed'""",
+            (delay, now, video_id),
+        )
+        await self._db.commit()
+        return await self.get_queue_entry(video_id)
+
     async def get_position_and_estimate(self, video_id: str) -> dict | None:
         """Return queue position (1-indexed) and estimated wait seconds for a video."""
         entry = await self.get_queue_entry(video_id)
